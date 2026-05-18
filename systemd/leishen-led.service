@@ -1,0 +1,14 @@
+[Unit]
+Description=Leishen LED local control service
+
+[Service]
+Type=simple
+ExecStart=/opt/leishen-led/bin/leishen-ledd --listen 0.0.0.0:8787 --web-root /opt/leishen-led/web --state /var/lib/leishen-led/state.json
+Restart=on-failure
+RestartSec=2
+TimeoutStartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

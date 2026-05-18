@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Leishen LED Control</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="shell">
+    <section class="preview" aria-label="灯效预览">
+      <div class="light-preview" id="preview" aria-hidden="true">
+        <div class="bar-frame">
+          <div class="light-bar">
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+          <div class="glow"></div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="controls" aria-label="控制面板">
+      <div class="title-block">
+        <h1>Leishen LED</h1>
+        <p id="summary">读取状态中...</p>
+      </div>
+
+      <div class="field">
+        <label for="mode">模式</label>
+        <select id="mode">
+          <option value="off">Off</option>
+          <option value="static">Static</option>
+          <option value="breathing">Breathing</option>
+          <option value="flow">Color Flow</option>
+          <option value="flash">Flash</option>
+          <option value="successively">Successively</option>
+          <option value="marquee">Marquee</option>
+          <option value="scanning">Scanning</option>
+          <option value="meteor">Meteor</option>
+        </select>
+      </div>
+
+      <div class="field color-field">
+        <label for="color">颜色</label>
+        <input id="color" type="color" value="#b200ff">
+      </div>
+
+      <div class="field">
+        <label for="brightness">亮度 <output id="brightnessValue">70</output></label>
+        <input id="brightness" type="range" min="0" max="100" value="70">
+      </div>
+
+      <div class="field">
+        <label for="time">时间 <output id="timeValue">0</output></label>
+        <input id="time" type="range" min="0" max="4000" step="50" value="0">
+      </div>
+
+      <div class="actions">
+        <button type="button" id="apply">应用</button>
+        <button type="button" id="staticPurple">静态紫色</button>
+        <button type="button" id="flowPreset">幻彩流水</button>
+        <button type="button" id="offPreset">关灯</button>
+      </div>
+
+      <pre id="statusText"></pre>
+    </aside>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
