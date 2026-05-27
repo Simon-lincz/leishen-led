@@ -2,6 +2,7 @@
 
 #include "ec.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -21,6 +22,18 @@ static const struct mode_name modes[] = {
     {"marquee", 6},
     {"scanning", 7},
     {"meteor", 8},
+};
+
+static const led_mode_info_t mode_infos[] = {
+    {0, "off", "关闭", 0, 0, 0},
+    {1, "static", "常亮", 1, 1, 0},
+    {2, "breathing", "呼吸", 1, 1, 1},
+    {3, "flow", "流光", 1, 1, 1},
+    {4, "flash", "闪烁", 1, 1, 1},
+    {5, "successively", "渐次", 1, 1, 1},
+    {6, "marquee", "跑马灯", 1, 1, 1},
+    {7, "scanning", "扫描", 1, 1, 1},
+    {8, "meteor", "流星", 1, 1, 1},
 };
 
 static int parse_u8(const char *text, uint8_t *value) {
@@ -65,8 +78,178 @@ const char *led_mode_label(uint8_t value) {
     }
 }
 
+const led_mode_info_t *led_get_mode_info(uint8_t value) {
+    if (value >= LED_MODE_MAX) {
+        return NULL;
+    }
+
+    return &mode_infos[value];
+}
+
 int led_validate_state(const struct led_state *state) {
     return state && state->mode <= 8 ? 0 : -1;
+}
+
+static int json_find_int(const char *json, const char *key, int min, int max, int *out) {
+    char pattern[64];
+    const char *at = NULL;
+    const char *cursor = NULL;
+    char *end = NULL;
+    long value = 0;
+
+    snprintf(pattern, sizeof(pattern), "\"%s\"", key);
+    at = strstr(json, pattern);
+    if (!at) {
+        return -1;
+    }
+
+    cursor = strchr(at + strlen(pattern), ':');
+    if (!cursor) {
+        return -1;
+    }
+    cursor++;
+    while (*cursor == ' ' || *cursor == '\t' || *cursor == '\n') {
+        cursor++;
+    }
+
+    value = strtol(cursor, &end, 10);
+    if (cursor == end || value < min || value > max) {
+        return -1;
+    }
+
+    *out = (int)value;
+    return 0;
+}
+
+static int json_find_string(const char *json, const char *key, char *out, size_t out_size) {
+    char pattern[64];
+    const char *at = NULL;
+    const char *cursor = NULL;
+    const char *end = NULL;
+    size_t length = 0;
+
+    snprintf(pattern, sizeof(pattern), "\"%s\"", key);
+    at = strstr(json, pattern);
+    if (!at) {
+        return -1;
+    }
+
+    cursor = strchr(at + strlen(pattern), ':');
+    if (!cursor) {
+        return -1;
+    }
+    cursor++;
+    while (*cursor == ' ' || *cursor == '\t' || *cursor == '\n') {
+        cursor++;
+    }
+    if (*cursor != '"') {
+        return -1;
+    }
+    cursor++;
+
+    end = strchr(cursor, '"');
+    if (!end) {
+        return -1;
+    }
+
+    length = (size_t)(end - cursor);
+    if (length == 0 || length >= out_size) {
+        return -1;
+    }
+
+    memcpy(out, cursor, length);
+    out[length] = '\0';
+    return 0;
+}
+
+static int json_find_color(const char *json, struct led_state *state) {
+    const char *at = strstr(json, "\"color\"");
+    const char *open = NULL;
+    int r = 0;
+    int g = 0;
+    int b = 0;
+
+    if (!at) {
+        return -1;
+    }
+    open = strchr(at, '[');
+    if (!open || sscanf(open, "[%d,%d,%d]", &r, &g, &b) != 3) {
+        return -1;
+    }
+    if (r < 0 || r > 255 || g < 0 || g > 255 || b < 0 || b > 255) {
+        return -1;
+    }
+
+    state->r = (uint8_t)r;
+    state->g = (uint8_t)g;
+    state->b = (uint8_t)b;
+    return 0;
+}
+
+char *led_state_to_json(const struct led_state *state) {
+    char *json = NULL;
+    int length = 0;
+
+    if (led_validate_state(state)) {
+        return NULL;
+    }
+
+    length = snprintf(NULL, 0,
+        "{\"mode\":%u,\"modeName\":\"%s\",\"brightness\":%u,"
+        "\"color\":[%u,%u,%u],\"time\":%u}",
+        state->mode, led_mode_label(state->mode), state->brightness,
+        state->r, state->g, state->b, state->time);
+    if (length < 0) {
+        return NULL;
+    }
+
+    json = malloc((size_t)length + 1);
+    if (!json) {
+        return NULL;
+    }
+
+    snprintf(json, (size_t)length + 1,
+        "{\"mode\":%u,\"modeName\":\"%s\",\"brightness\":%u,"
+        "\"color\":[%u,%u,%u],\"time\":%u}",
+        state->mode, led_mode_label(state->mode), state->brightness,
+        state->r, state->g, state->b, state->time);
+    return json;
+}
+
+int led_state_from_json(const char *json, struct led_state *state) {
+    char mode_text[32];
+    int value = 0;
+
+    if (!json || !state) {
+        return -1;
+    }
+
+    memset(state, 0, sizeof(*state));
+    if (json_find_string(json, "mode", mode_text, sizeof(mode_text)) == 0) {
+        if (led_parse_mode(mode_text, &state->mode)) {
+            return -1;
+        }
+    } else if (json_find_int(json, "mode", 0, LED_MODE_MAX - 1, &value) == 0) {
+        state->mode = (uint8_t)value;
+    } else {
+        return -1;
+    }
+
+    if (json_find_int(json, "brightness", 0, 255, &value)) {
+        return -1;
+    }
+    state->brightness = (uint8_t)value;
+
+    if (json_find_color(json, state)) {
+        return -1;
+    }
+
+    if (json_find_int(json, "time", 0, 65535, &value)) {
+        return -1;
+    }
+    state->time = (uint16_t)value;
+
+    return led_validate_state(state);
 }
 
 int led_read_state(struct led_state *state) {

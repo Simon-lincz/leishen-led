@@ -1,5 +1,6 @@
 #define _GNU_SOURCE
 
+#include "api/api.h"
 #include "ec.h"
 #include "led_protocol.h"
 
@@ -159,31 +160,6 @@ static bool is_allowed_client(struct sockaddr_in *peer) {
     }
 
     return false;
-}
-
-static void send_json_state(int fd, const struct led_state *state) {
-    char body[512];
-
-    snprintf(body, sizeof(body),
-        "{"
-        "\"mode\":%u,"
-        "\"modeName\":\"%s\","
-        "\"brightness\":%u,"
-        "\"color\":[%u,%u,%u],"
-        "\"time\":%u,"
-        "\"offsets\":{"
-        "\"mode\":\"0x95\","
-        "\"brightness\":\"0x98\","
-        "\"r\":\"0x9A\","
-        "\"g\":\"0x9B\","
-        "\"b\":\"0x9C\","
-        "\"timeHigh\":\"0x9D\","
-        "\"timeLow\":\"0x9E\""
-        "}"
-        "}",
-        state->mode, led_mode_label(state->mode), state->brightness,
-        state->r, state->g, state->b, state->time);
-    send_response(fd, 200, "OK", "application/json; charset=utf-8", body);
 }
 
 static int save_state(const char *path, const struct led_state *state) {
@@ -398,65 +374,12 @@ static void serve_file(int fd, const struct config *config, const char *url_path
 
 static void handle_api(int fd, const struct config *config, const char *method,
                        const char *path, const char *body) {
-    struct led_state state;
+    struct api_dispatch_ctx ctx = {
+        .state_path = config->state_path,
+        .schedule_save = save_state,
+    };
 
-    if (strcmp(method, "OPTIONS") == 0) {
-        send_response(fd, 204, "No Content", "text/plain; charset=utf-8", "");
-        return;
-    }
-
-    if (strcmp(method, "GET") == 0 && strcmp(path, "/api/status") == 0) {
-        if (led_read_state(&state)) {
-            send_response(fd, 500, "Internal Server Error", "application/json; charset=utf-8",
-                "{\"error\":\"read EC state failed\"}");
-            return;
-        }
-        send_json_state(fd, &state);
-        return;
-    }
-
-    if (strcmp(method, "GET") == 0 && strcmp(path, "/api/presets") == 0) {
-        send_response(fd, 200, "OK", "application/json; charset=utf-8",
-            "{\"modes\":[\"off\",\"static\",\"breathing\",\"flow\",\"flash\",\"successively\",\"marquee\",\"scanning\",\"meteor\"]}");
-        return;
-    }
-
-    if (strcmp(method, "POST") == 0 &&
-        (strcmp(path, "/api/apply") == 0 || strcmp(path, "/api/effect") == 0)) {
-        if (parse_state_json(body, &state)) {
-            send_response(fd, 400, "Bad Request", "application/json; charset=utf-8",
-                "{\"error\":\"invalid LED state\"}");
-            return;
-        }
-        if (led_apply_state(&state)) {
-            send_response(fd, 500, "Internal Server Error", "application/json; charset=utf-8",
-                "{\"error\":\"write EC state failed\"}");
-            return;
-        }
-        (void)save_state(config->state_path, &state);
-        send_json_state(fd, &state);
-        return;
-    }
-
-    if (strcmp(method, "POST") == 0 && strcmp(path, "/api/off") == 0) {
-        state.mode = 0;
-        state.brightness = 0;
-        state.r = 0;
-        state.g = 0;
-        state.b = 0;
-        state.time = 0;
-        if (led_apply_state(&state)) {
-            send_response(fd, 500, "Internal Server Error", "application/json; charset=utf-8",
-                "{\"error\":\"write EC state failed\"}");
-            return;
-        }
-        (void)save_state(config->state_path, &state);
-        send_json_state(fd, &state);
-        return;
-    }
-
-    send_response(fd, 404, "Not Found", "application/json; charset=utf-8",
-        "{\"error\":\"not found\"}");
+    api_dispatch(fd, method, path, body, &ctx);
 }
 
 static void handle_client(int fd, const struct config *config) {

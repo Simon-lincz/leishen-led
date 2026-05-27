@@ -107,6 +107,7 @@ sudo /opt/leishen-led/bin/leishen_led set --mode static --color 178 0 255 --brig
 ```text
 GET  /api/status
 GET  /api/presets
+GET  /api/modes
 POST /api/apply
 POST /api/effect
 POST /api/off
