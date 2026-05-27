@@ -1,4 +1,4 @@
-# Leishen LED Linux 控制服务
+# Leishen MIX II PRO 迷你PC:LED Linux 控制服务
 
 这个项目把雷神 T-Control 的灯效控制移植成 Linux 本地服务。服务监听 `0.0.0.0:8787`，但只允许 `127.0.0.0/8`、`100.64.0.0/10`、`192.168.0.0/16` 访问。
 
