@@ -1,29 +1,73 @@
-# Leishen MIX II PRO 迷你PC:LED Linux 控制服务
+# Leishen MIX II PRO / MIX PRO AR LED Control for Linux
 
-这个项目把雷神 T-Control 的灯效控制移植成 Linux 本地服务。服务监听 `0.0.0.0:8787`，但只允许 `127.0.0.0/8`、`100.64.0.0/10`、`192.168.0.0/16` 访问。
+Linux native LED/RGB control service for the **Leishen MIX II PRO** and **Leishen MIX PRO AR** mini PCs. It ports the Leishen T-Control lighting protocol to Linux and provides a Web UI, CLI, HTTP API, and systemd service for controlling the device LED effects.
 
-## 硬件接口
+中文：雷神 MIX II PRO / 雷神 MIX PRO AR 迷你 PC / T-Control 灯效 Linux 控制服务，支持网页控制台、命令行、HTTP API、开机自启和状态恢复。
 
-EC 端口：
+![Leishen MIX mini PC](device.png)
 
-```text
-data: 0x62
-cmd:  0x66
+## Web UI Preview
+
+![Leishen LED Web UI](web.png)
+
+## Features
+
+- Control Leishen MIX II PRO and MIX PRO AR LED/RGB lighting on Linux
+- Web dashboard available from localhost, LAN, and Tailscale/CGNAT ranges
+- CLI commands for mode, color, brightness, speed, and status
+- HTTP API for custom automation and integrations
+- systemd service with boot-time auto start
+- Saves the latest effect to `/var/lib/leishen-led/state.json` and restores it after reboot
+- Built-in IP allowlist to reduce accidental exposure
+
+## Supported Hardware
+
+- Leishen MIX II PRO mini PC
+- Leishen MIX PRO AR mini PC
+- Other Leishen devices using the same EC LED protocol may work, but are not tested
+
+## Quick Start
+
+```bash
+sudo ./install.sh
 ```
 
-灯效白名单 offset：
+The installer builds and installs:
 
 ```text
-0x95 mode
-0x98 brightness
-0x9A red
-0x9B green
-0x9C blue
-0x9D time high
-0x9E time low
+/opt/leishen-led/bin/leishen_led
+/opt/leishen-led/bin/leishen-ledd
+/opt/leishen-led/web/*
+/etc/systemd/system/leishen-led.service
+/var/lib/leishen-led/state.json
 ```
 
-模式：
+Check service status:
+
+```bash
+systemctl status leishen-led.service
+```
+
+Open the Web UI:
+
+```text
+http://127.0.0.1:8787/
+http://192.168.x.x:8787/
+http://100.64.x.x:8787/
+```
+
+## CLI Usage
+
+```bash
+sudo /opt/leishen-led/bin/leishen_led status
+sudo /opt/leishen-led/bin/leishen_led mode flow
+sudo /opt/leishen-led/bin/leishen_led color 178 0 255
+sudo /opt/leishen-led/bin/leishen_led brightness 70
+sudo /opt/leishen-led/bin/leishen_led time 0
+sudo /opt/leishen-led/bin/leishen_led set --mode static --color 178 0 255 --brightness 70 --time 0
+```
+
+## Lighting Modes
 
 ```text
 0 off
@@ -37,71 +81,6 @@ cmd:  0x66
 8 meteor
 ```
 
-## 安装
-
-```bash
-sudo ./install.sh
-```
-
-安装内容：
-
-```text
-/opt/leishen-led/bin/leishen_led
-/opt/leishen-led/bin/leishen-ledd
-/opt/leishen-led/web/*
-/etc/systemd/system/leishen-led.service
-/var/lib/leishen-led/state.json
-```
-
-服务会自动启动并设置开机自启：
-
-```bash
-systemctl status leishen-led.service
-```
-
-打开控制台：
-
-```text
-http://127.0.0.1:8787/
-http://192.168.x.x:8787/
-http://100.64.x.x:8787/
-```
-
-安装脚本会在存在 UFW 时自动添加：
-
-```bash
-ufw allow from 100.64.0.0/10 to any port 8787 proto tcp
-ufw allow from 192.168.0.0/16 to any port 8787 proto tcp
-ufw deny from any to any port 8787 proto tcp
-```
-
-服务自身也会检查来源 IP，不在白名单内会返回 `403`。
-
-## 卸载
-
-保留上次灯效配置：
-
-```bash
-sudo ./uninstall.sh
-```
-
-彻底删除：
-
-```bash
-sudo ./uninstall.sh --purge
-```
-
-## 命令行工具
-
-```bash
-sudo /opt/leishen-led/bin/leishen_led status
-sudo /opt/leishen-led/bin/leishen_led mode flow
-sudo /opt/leishen-led/bin/leishen_led color 178 0 255
-sudo /opt/leishen-led/bin/leishen_led brightness 70
-sudo /opt/leishen-led/bin/leishen_led time 0
-sudo /opt/leishen-led/bin/leishen_led set --mode static --color 178 0 255 --brightness 70 --time 0
-```
-
 ## API
 
 ```text
@@ -113,7 +92,7 @@ POST /api/effect
 POST /api/off
 ```
 
-`POST /api/apply` 请求：
+`POST /api/apply` request:
 
 ```json
 {
@@ -124,4 +103,83 @@ POST /api/off
 }
 ```
 
-每次成功写入后，服务会保存到 `/var/lib/leishen-led/state.json`，下次开机自动恢复。
+After each successful write, the service saves the current effect to `/var/lib/leishen-led/state.json` and restores it on the next boot.
+
+## Network Access
+
+The daemon listens on `0.0.0.0:8787`, but only allows requests from:
+
+```text
+127.0.0.0/8
+100.64.0.0/10
+192.168.0.0/16
+```
+
+If UFW is installed, the installer also adds:
+
+```bash
+ufw allow from 100.64.0.0/10 to any port 8787 proto tcp
+ufw allow from 192.168.0.0/16 to any port 8787 proto tcp
+ufw deny from any to any port 8787 proto tcp
+```
+
+The service validates the source IP itself. Requests outside the allowlist return `403`.
+
+## Hardware Details
+
+EC ports:
+
+```text
+data: 0x62
+cmd:  0x66
+```
+
+LED whitelist offsets:
+
+```text
+0x95 mode
+0x98 brightness
+0x9A red
+0x9B green
+0x9C blue
+0x9D time high
+0x9E time low
+```
+
+## Uninstall
+
+Keep the last saved lighting state:
+
+```bash
+sudo ./uninstall.sh
+```
+
+Remove the service and saved state:
+
+```bash
+sudo ./uninstall.sh --purge
+```
+
+## GitHub Topics
+
+Recommended repository topics:
+
+```text
+leishen
+leishen-mix-ii-pro
+leishen-mix-pro-ar
+linux
+led-control
+rgb-control
+mini-pc
+systemd
+embedded-controller
+ec
+tailscale
+```
+
+Recommended repository description:
+
+```text
+Linux LED/RGB control service for Leishen MIX II PRO and MIX PRO AR mini PCs with Web UI, CLI and systemd support.
+```
